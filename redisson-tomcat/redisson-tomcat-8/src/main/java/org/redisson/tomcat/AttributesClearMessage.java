@@ -25,8 +25,8 @@ public class AttributesClearMessage extends AttributeMessage {
     public AttributesClearMessage() {
     }
 
-    public AttributesClearMessage(String sessionId) {
-        super(sessionId);
+    public AttributesClearMessage(String sessionId, String source) {
+        super(sessionId, source);
     }
 
 }

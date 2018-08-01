@@ -28,8 +28,8 @@ public class AttributeUpdateMessage extends AttributeMessage {
     public AttributeUpdateMessage() {
     }
     
-    public AttributeUpdateMessage(String sessionId, String name, Object value) {
-        super(sessionId);
+    public AttributeUpdateMessage(String sessionId, String source, String name, Object value) {
+        super(sessionId, source);
         this.name = name;
         this.value = value;
     }

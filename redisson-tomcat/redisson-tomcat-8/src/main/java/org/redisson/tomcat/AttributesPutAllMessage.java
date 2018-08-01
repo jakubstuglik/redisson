@@ -29,8 +29,8 @@ public class AttributesPutAllMessage extends AttributeMessage {
     public AttributesPutAllMessage() {
     }
 
-    public AttributesPutAllMessage(String sessionId, Map<String, Object> attrs) {
-        super(sessionId);
+    public AttributesPutAllMessage(String sessionId, String source, Map<String, Object> attrs) {
+        super(sessionId, source);
         this.attrs = attrs;
     }
     

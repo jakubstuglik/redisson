@@ -25,16 +25,27 @@ import java.io.Serializable;
 public class AttributeMessage implements Serializable {
 
     private String sessionId;
+    
+    private String source;
 
     public AttributeMessage() {
     }
     
-    public AttributeMessage(String sessionId) {
+    public AttributeMessage(String sessionId, String source) {
         this.sessionId = sessionId;
+        this.source = source;
     }
     
     public String getSessionId() {
         return sessionId;
     }
+
+	public String getSource() {
+		return source;
+	}
+
+	public void setSource(String source) {
+		this.source = source;
+	}
     
 }

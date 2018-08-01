@@ -46,6 +46,8 @@ import io.netty.util.internal.PlatformDependent;
  *
  */
 public class RedissonSessionManager extends ManagerBase {
+	
+	private static final String TOMCAT_NAME_PROP = "jvmRoute";
 
     public enum ReadMode {REDIS, MEMORY}
     public enum UpdateMode {DEFAULT, AFTER_REQUEST}
@@ -59,6 +61,8 @@ public class RedissonSessionManager extends ManagerBase {
     private UpdateMode updateMode = UpdateMode.DEFAULT;
 
     private String keyPrefix = "";
+    
+    private String tomcatName = System.getProperty(TOMCAT_NAME_PROP);
     
     private final String id = ByteBufUtil.hexDump(generateId());
     
@@ -146,6 +150,9 @@ public class RedissonSessionManager extends ManagerBase {
     
     @Override
     public Session findSession(String id) throws IOException {
+    	if (id == null) {
+    		return null;
+    	}
         Session result = super.findSession(id);
         if (result == null && id != null) {
             Map<String, Object> attrs = getMap(id).readAllMap();
@@ -173,7 +180,7 @@ public class RedissonSessionManager extends ManagerBase {
     
     @Override
     public Session createEmptySession() {
-        return new RedissonSession(this, readMode, updateMode);
+        return new RedissonSession(this, readMode, updateMode, tomcatName);
     }
     
     @Override
@@ -205,6 +212,9 @@ public class RedissonSessionManager extends ManagerBase {
                 @Override
                 public void onMessage(String channel, AttributeMessage msg) {
                     try {
+                    	if (msg.getSource().equals(tomcatName)) {
+                    		return;
+                    	}
                         // TODO make it thread-safe
                         RedissonSession session = (RedissonSession) RedissonSessionManager.super.findSession(msg.getSessionId());
                         if (session != null) {
