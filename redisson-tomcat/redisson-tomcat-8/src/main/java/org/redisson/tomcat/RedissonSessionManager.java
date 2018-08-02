@@ -15,23 +15,17 @@
  */
 package org.redisson.tomcat;
 
-import java.io.File;
-import java.io.IOException;
-import java.util.Map;
+import java.io.*;
+import java.util.*;
 import java.util.Map.Entry;
 
 import javax.servlet.http.HttpSession;
 
-import org.apache.catalina.LifecycleException;
-import org.apache.catalina.LifecycleState;
-import org.apache.catalina.Session;
+import org.apache.catalina.*;
 import org.apache.catalina.session.ManagerBase;
-import org.apache.juli.logging.Log;
-import org.apache.juli.logging.LogFactory;
+import org.apache.juli.logging.*;
 import org.redisson.Redisson;
-import org.redisson.api.RMap;
-import org.redisson.api.RTopic;
-import org.redisson.api.RedissonClient;
+import org.redisson.api.*;
 import org.redisson.api.listener.MessageListener;
 import org.redisson.client.codec.Codec;
 import org.redisson.config.Config;
@@ -284,6 +278,8 @@ public class RedissonSessionManager extends ManagerBase {
         
         setState(LifecycleState.STOPPING);
         
+        flushAllSessionsToRedisson();
+        
         try {
             if (redisson != null) {
                 redisson.shutdown();
@@ -294,7 +290,22 @@ public class RedissonSessionManager extends ManagerBase {
         
     }
 
-    public void store(HttpSession session) throws IOException {
+    /**
+     * The method flushes all sessions to Redisson meaning for every session puts all attributes to it again. This is
+     * important if someone changed session attribute (for example change the value of its field using setter)
+     * and did not use setAttribute again. Then the change won't be persisted into Redisson. 
+     */
+    private void flushAllSessionsToRedisson() {
+		Collection<Session> sess = sessions.values();
+		for (Session s : sess) {
+			if (s instanceof RedissonSession) {
+				RedissonSession rs = (RedissonSession) s;				
+				rs.resetAllAttributes();
+			}
+		}
+	}
+
+	public void store(HttpSession session) throws IOException {
         if (session == null) {
             return;
         }
