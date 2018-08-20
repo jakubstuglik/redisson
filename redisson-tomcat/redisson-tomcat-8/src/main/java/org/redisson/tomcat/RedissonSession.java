@@ -16,13 +16,16 @@
 package org.redisson.tomcat;
 
 import java.lang.reflect.Field;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.catalina.session.StandardSession;
-import org.redisson.api.*;
-import org.redisson.tomcat.RedissonSessionManager.*;
+import org.redisson.api.RMap;
+import org.redisson.api.RTopic;
+import org.redisson.tomcat.RedissonSessionManager.ReadMode;
+import org.redisson.tomcat.RedissonSessionManager.UpdateMode;
 
 /**
  * Redisson Session object for Apache Tomcat
@@ -181,15 +184,14 @@ public class RedissonSession extends StandardSession {
     
     @Override
     public void setAttribute(String name, Object value, boolean notify) {
-    	//value = enhanceValue(value);
         super.setAttribute(name, value, notify);
         
         if (updateMode == UpdateMode.DEFAULT && map != null && value != null) {
             fastPut(name, value);
-        }                
-    }      
-
-	public void superRemoveAttributeInternal(String name, boolean notify) {
+        }
+    }
+    
+    public void superRemoveAttributeInternal(String name, boolean notify) {
         super.removeAttributeInternal(name, notify);
     }
     
@@ -261,28 +263,4 @@ public class RedissonSession extends StandardSession {
         }
     }
     
-    protected void resetAllAttributes() {
-    	setAllAttributes(attributes);
-    }
-    
-    private void setAllAttributes(Map<String, Object> newMap) {
-	    map.putAll(newMap);
-	    if (readMode == ReadMode.MEMORY) {
-	        topic.publish(createPutAllMessage(newMap));
-	    }
-    }
-    
-    /*private Object enhanceValue(Object value) {
-		Enhancer enhancer = new Enhancer();
-		enhancer.setSuperclass(value.getClass());
-		enhancer.setCallback((MethodInterceptor) (obj, method, args, proxy) -> {
-			String methodName = method.getName();
-			if (methodName.startsWith("set")) {
-				if (args.length == 1) {
-					Object fieldValue = args[0];
-					
-				}
-			}
-		});
-	}*/
 }
