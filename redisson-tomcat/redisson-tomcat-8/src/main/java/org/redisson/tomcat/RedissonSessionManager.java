@@ -43,7 +43,7 @@ public class RedissonSessionManager extends ManagerBase {
 	
 	private static final String TOMCAT_NAME_PROP = "jvmRoute";
 
-    public enum ReadMode {REDIS, MEMORY}
+    public enum ReadMode {REDIS, MEMORY, MEMORY_NO_PROPAGATION}
     public enum UpdateMode {DEFAULT, AFTER_REQUEST}
     
     private final Log log = LogFactory.getLog(RedissonSessionManager.class);
@@ -277,9 +277,7 @@ public class RedissonSessionManager extends ManagerBase {
         super.stopInternal();
         
         setState(LifecycleState.STOPPING);
-        
-        flushAllSessionsToRedisson();
-        
+      
         try {
             if (redisson != null) {
                 redisson.shutdown();
@@ -288,22 +286,7 @@ public class RedissonSessionManager extends ManagerBase {
             throw new LifecycleException(e);
         }
         
-    }
-
-    /**
-     * The method flushes all sessions to Redisson meaning for every session puts all attributes to it again. This is
-     * important if someone changed session attribute (for example change the value of its field using setter)
-     * and did not use setAttribute again. Then the change won't be persisted into Redisson. 
-     */
-    private void flushAllSessionsToRedisson() {
-		Collection<Session> sess = sessions.values();
-		for (Session s : sess) {
-			if (s instanceof RedissonSession) {
-				RedissonSession rs = (RedissonSession) s;				
-				rs.resetAllAttributes();
-			}
-		}
-	}
+    }    
 
 	public void store(HttpSession session) throws IOException {
         if (session == null) {
