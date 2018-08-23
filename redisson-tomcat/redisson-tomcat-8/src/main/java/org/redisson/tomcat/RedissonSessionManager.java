@@ -152,7 +152,7 @@ public class RedissonSessionManager extends ManagerBase {
             Map<String, Object> attrs = getMap(id).readAllMap();
             
             if (attrs.isEmpty() || !Boolean.valueOf(String.valueOf(attrs.get("session:isValid")))) {
-                log.info("Session " + id + " can't be found");
+                //log.info("Session " + id + " can't be found");
                 return null;
             }
             
