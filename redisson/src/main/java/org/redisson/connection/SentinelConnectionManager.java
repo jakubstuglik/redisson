@@ -15,8 +15,7 @@
  */
 package org.redisson.connection;
 
-import java.net.InetSocketAddress;
-import java.net.URI;
+import java.net.*;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -510,13 +509,30 @@ public class SentinelConnectionManager extends MasterSlaveConnectionManager {
         String master = currentMaster.get();
         String slaveMaster = createAddress(slaveMasterHost, slaveMasterPort);
         if (!master.equals(slaveMaster)) {
-            log.warn("Skipped slave up {} for master {} differs from current {}", slaveIp + ":" + slavePort, slaveMaster, master);
-            return false;
+        	// Check if the difference is not because of numeric ip and host name
+        	if (!differenceNumericIPAndHostname(master, slaveMaster)) {
+	            log.warn("Skipped slave up {} for master {} differs from current {}", slaveIp + ":" + slavePort, slaveMaster, master);
+	            return false;
+        	}
         }
         return true;
     }
     
-    private void slaveUp(String ip, String port) {
+    private boolean differenceNumericIPAndHostname(String master, String slaveMaster) {
+    	try {
+			URI masterUri = new URI(master);
+			URI slaveMasterUri = new URI(slaveMaster);
+			InetAddress masterAddr = InetAddress.getByName(masterUri.getHost());
+			InetAddress slaveMasterAddr = InetAddress.getByName(slaveMasterUri.getHost());
+			return masterAddr.getHostAddress().equals(slaveMasterAddr.getHostAddress());
+    	} catch (URISyntaxException e) {
+    		return true;
+    	} catch (UnknownHostException e) {
+    		return true;
+    	}
+	}
+
+	private void slaveUp(String ip, String port) {
         if (config.checkSkipSlavesInit()) {
             String slaveAddr = ip + ":" + port;
             log.info("slave: {} has up", slaveAddr);
