@@ -168,6 +168,7 @@ public class RedissonSessionManager extends ManagerBase {
 	            return session;
         	} catch (RedisException e) {
         		log.error("Problem reading session " + id + " from redis, returning null.");
+        		return null;
         	}
         }
 
