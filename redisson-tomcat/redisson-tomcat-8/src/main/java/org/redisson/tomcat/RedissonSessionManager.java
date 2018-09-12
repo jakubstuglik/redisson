@@ -27,6 +27,7 @@ import org.apache.juli.logging.*;
 import org.redisson.Redisson;
 import org.redisson.api.*;
 import org.redisson.api.listener.MessageListener;
+import org.redisson.client.RedisException;
 import org.redisson.client.codec.Codec;
 import org.redisson.config.Config;
 
@@ -149,21 +150,25 @@ public class RedissonSessionManager extends ManagerBase {
     	}
         Session result = super.findSession(id);
         if (result == null && id != null) {
-            Map<String, Object> attrs = getMap(id).readAllMap();
-            
-            if (attrs.isEmpty() || !Boolean.valueOf(String.valueOf(attrs.get("session:isValid")))) {
-                //log.info("Session " + id + " can't be found");
-                return null;
-            }
-            
-            RedissonSession session = (RedissonSession) createEmptySession();
-            session.setId(id);
-            session.setManager(this);
-            session.load(attrs);
-            
-            session.access();
-            session.endAccess();
-            return session;
+        	try {
+	            Map<String, Object> attrs = getMap(id).readAllMap();
+	            
+	            if (attrs.isEmpty() || !Boolean.valueOf(String.valueOf(attrs.get("session:isValid")))) {
+	                //log.info("Session " + id + " can't be found");
+	                return null;
+	            }
+	            
+	            RedissonSession session = (RedissonSession) createEmptySession();
+	            session.setId(id);
+	            session.setManager(this);
+	            session.load(attrs);
+	            
+	            session.access();
+	            session.endAccess();
+	            return session;
+        	} catch (RedisException e) {
+        		log.error("Problem reading session " + id + " from redis, returning null.");
+        	}
         }
 
         result.access();
