@@ -142,7 +142,9 @@ public class Redisson implements RedissonClient {
      */
     public static RedissonClient create() {
         Config config = new Config();
-        config.useSingleServer().setAddress("redis://127.0.0.1:6379");
+        config.useSingleServer()
+        .setTimeout(1000000)
+        .setAddress("redis://127.0.0.1:6379");
 //        config.useMasterSlaveConnection().setMasterAddress("127.0.0.1:6379").addSlaveAddress("127.0.0.1:6389").addSlaveAddress("127.0.0.1:6399");
 //        config.useSentinelConnection().setMasterName("mymaster").addSentinelAddress("127.0.0.1:26389", "127.0.0.1:26379");
 //        config.useClusterServers().addNodeAddress("127.0.0.1:7000");
@@ -233,12 +235,12 @@ public class Redisson implements RedissonClient {
 
     @Override
     public RBuckets getBuckets() {
-        return new RedissonBuckets(this, connectionManager.getCommandExecutor());
+        return new RedissonBuckets(connectionManager.getCommandExecutor());
     }
 
     @Override
     public RBuckets getBuckets(Codec codec) {
-        return new RedissonBuckets(this, codec, connectionManager.getCommandExecutor());
+        return new RedissonBuckets(codec, connectionManager.getCommandExecutor());
     }
 
     @Override

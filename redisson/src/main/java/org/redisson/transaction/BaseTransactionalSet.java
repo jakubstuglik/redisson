@@ -298,8 +298,8 @@ public abstract class BaseTransactionalSet<V> extends BaseTransactionalObject {
         RSet<V> destinationSet = new RedissonSet<V>(object.getCodec(), commandExecutor, destination, null);
         
         final RPromise<Boolean> result = new RedissonPromise<Boolean>();
-        RLock destinationLock = destinationSet.getLock(value);
-        RLock lock = getLock(value);
+        RLock destinationLock = getLock(destinationSet, value);
+        RLock lock = getLock(set, value);
         final RedissonMultiLock multiLock = new RedissonMultiLock(destinationLock, lock);
         final long threadId = Thread.currentThread().getId();
         multiLock.lockAsync(timeout, TimeUnit.MILLISECONDS).addListener(new FutureListener<Void>() {
@@ -349,7 +349,7 @@ public abstract class BaseTransactionalSet<V> extends BaseTransactionalObject {
 
     protected abstract MoveOperation createMoveOperation(String destination, V value, long threadId);
 
-    protected abstract RLock getLock(V value);
+    protected abstract RLock getLock(RCollectionAsync<V> set, V value);
     
     public RFuture<Boolean> removeAsync(final Object value) {
         final RPromise<Boolean> result = new RedissonPromise<Boolean>();
@@ -494,11 +494,35 @@ public abstract class BaseTransactionalSet<V> extends BaseTransactionalObject {
     public RFuture<Set<V>> readSortAsync(String byPattern, SortOrder order) {
         throw new UnsupportedOperationException();
     }
-    
+
     public <T> RFuture<Collection<T>> readSortAsync(String byPattern, List<String> getPatterns, SortOrder order, int offset, int count) {
         throw new UnsupportedOperationException();
     }
-    
+
+    public RFuture<Set<V>> readSortAlphaAsync(SortOrder order) {
+        throw new UnsupportedOperationException();
+    }
+
+    public RFuture<Set<V>> readSortAlphaAsync(SortOrder order, int offset, int count) {
+        throw new UnsupportedOperationException();
+    }
+
+    public RFuture<Set<V>>  readSortAlphaAsync(String byPattern, SortOrder order) {
+        throw new UnsupportedOperationException();
+    }
+
+    public RFuture<Set<V>>  readSortAlphaAsync(String byPattern, SortOrder order, int offset, int count) {
+        throw new UnsupportedOperationException();
+    }
+
+    public <T> RFuture<Collection<T>> readSortAlphaAsync(String byPattern, List<String> getPatterns, SortOrder order) {
+        throw new UnsupportedOperationException();
+    }
+
+    public <T> RFuture<Collection<T>> readSortAlphaAsync(String byPattern, List<String> getPatterns, SortOrder order, int offset, int count) {
+        throw new UnsupportedOperationException();
+    }
+
     public RFuture<Integer> sortToAsync(String destName, String byPattern, List<String> getPatterns, SortOrder order, int offset, int count) {
         throw new UnsupportedOperationException();
     }
@@ -528,7 +552,7 @@ public abstract class BaseTransactionalSet<V> extends BaseTransactionalObject {
     }
     
     protected <R> void executeLocked(final RPromise<R> promise, Object value, final Runnable runnable) {
-        RLock lock = getLock((V) value);
+        RLock lock = getLock(set, (V) value);
         executeLocked(promise, runnable, lock);
     }
 
@@ -548,7 +572,7 @@ public abstract class BaseTransactionalSet<V> extends BaseTransactionalObject {
     protected <R> void executeLocked(final RPromise<R> promise, final Runnable runnable, Collection<?> values) {
         List<RLock> locks = new ArrayList<RLock>(values.size());
         for (Object value : values) {
-            RLock lock = getLock((V) value);
+            RLock lock = getLock(set, (V) value);
             locks.add(lock);
         }
         final RedissonMultiLock multiLock = new RedissonMultiLock(locks.toArray(new RLock[locks.size()]));

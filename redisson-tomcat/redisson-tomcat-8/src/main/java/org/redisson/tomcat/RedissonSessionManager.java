@@ -15,24 +15,28 @@
  */
 package org.redisson.tomcat;
 
-import java.io.*;
-import java.util.*;
+import java.io.File;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Map.Entry;
 
 import javax.servlet.http.HttpSession;
 
-import org.apache.catalina.*;
+import org.apache.catalina.LifecycleException;
+import org.apache.catalina.LifecycleState;
+import org.apache.catalina.Session;
 import org.apache.catalina.session.ManagerBase;
-import org.apache.juli.logging.*;
+import org.apache.juli.logging.Log;
+import org.apache.juli.logging.LogFactory;
 import org.redisson.Redisson;
-import org.redisson.api.*;
+import org.redisson.api.RMap;
+import org.redisson.api.RTopic;
+import org.redisson.api.RedissonClient;
 import org.redisson.api.listener.MessageListener;
 import org.redisson.client.RedisException;
 import org.redisson.client.codec.Codec;
 import org.redisson.config.Config;
-
-import io.netty.buffer.ByteBufUtil;
-import io.netty.util.internal.PlatformDependent;
 
 /**
  * Redisson Session Manager for Apache Tomcat
@@ -41,7 +45,7 @@ import io.netty.util.internal.PlatformDependent;
  *
  */
 public class RedissonSessionManager extends ManagerBase {
-	
+
 	private static final String TOMCAT_NAME_PROP = "jvmRoute";
 
     public enum ReadMode {REDIS, MEMORY, MEMORY_NO_PROPAGATION}
@@ -56,17 +60,8 @@ public class RedissonSessionManager extends ManagerBase {
     private UpdateMode updateMode = UpdateMode.DEFAULT;
 
     private String keyPrefix = "";
-    
+
     private String tomcatName = System.getProperty(TOMCAT_NAME_PROP);
-    
-    private final String id = ByteBufUtil.hexDump(generateId());
-    
-    protected static byte[] generateId() {
-        byte[] id = new byte[16];
-        // TODO JDK UPGRADE replace to native ThreadLocalRandom
-        PlatformDependent.threadLocalRandom().nextBytes(id);
-        return id;
-    }
             
     public String getUpdateMode() {
         return updateMode.toString();
@@ -138,38 +133,38 @@ public class RedissonSessionManager extends ManagerBase {
         final String name = keyPrefix + separator + "redisson:tomcat_session:" + sessionId;
         return redisson.getMap(name);
     }
-    
+
     public RTopic<AttributeMessage> getTopic() {
         return redisson.getTopic("redisson:tomcat_session_updates:" + getContext().getName());
     }
     
     @Override
     public Session findSession(String id) throws IOException {
-    	if (id == null) {
-    		return null;
-    	}
         Session result = super.findSession(id);
-        if (result == null && id != null) {
-        	try {
-	            Map<String, Object> attrs = getMap(id).readAllMap();
-	            
-	            if (attrs.isEmpty() || !Boolean.valueOf(String.valueOf(attrs.get("session:isValid")))) {
-	                //log.info("Session " + id + " can't be found");
-	                return null;
-	            }
-	            
-	            RedissonSession session = (RedissonSession) createEmptySession();
-	            session.setId(id);
-	            session.setManager(this);
-	            session.load(attrs);
-	            
-	            session.access();
-	            session.endAccess();
-	            return session;
-        	} catch (RedisException e) {
-        		log.error("Problem reading session " + id + " from redis, returning null.");
-        		return null;
-        	}
+        if (result == null) {
+            if (id != null) {
+                Map<String, Object> attrs = new HashMap<String, Object>();
+                if (readMode == ReadMode.MEMORY) {
+                    attrs = getMap(id).readAllMap();
+                } else {
+                    attrs = getMap(id).getAll(RedissonSession.ATTRS);
+                }
+
+                if (attrs.isEmpty() || !Boolean.valueOf(String.valueOf(attrs.get("session:isValid")))) {
+                    //log.info("Session " + id + " can't be found");
+                    return null;
+                }
+
+                RedissonSession session = (RedissonSession) createEmptySession();
+                session.setId(id);
+                session.setManager(this);
+                session.load(attrs);
+
+                session.access();
+                session.endAccess();
+                return session;
+            }
+            return null;
         }
 
         result.access();
@@ -210,7 +205,7 @@ public class RedissonSessionManager extends ManagerBase {
             updatesTopic.addListener(new MessageListener<AttributeMessage>() {
                 
                 @Override
-                public void onMessage(String channel, AttributeMessage msg) {
+                public void onMessage(CharSequence channel, AttributeMessage msg) {
                     try {
                     	if (msg.getSource().equals(tomcatName)) {
                     		return;
@@ -283,7 +278,7 @@ public class RedissonSessionManager extends ManagerBase {
         super.stopInternal();
         
         setState(LifecycleState.STOPPING);
-      
+        
         try {
             if (redisson != null) {
                 redisson.shutdown();
@@ -292,9 +287,9 @@ public class RedissonSessionManager extends ManagerBase {
             throw new LifecycleException(e);
         }
         
-    }    
+    }
 
-	public void store(HttpSession session) throws IOException {
+    public void store(HttpSession session) throws IOException {
         if (session == null) {
             return;
         }
@@ -302,9 +297,9 @@ public class RedissonSessionManager extends ManagerBase {
         if (updateMode == UpdateMode.AFTER_REQUEST) {
             RedissonSession sess = (RedissonSession) super.findSession(session.getId());
             if (sess != null) {
-            sess.save();            
+                sess.save();
+            }
         }
-    }
     }
     
 }

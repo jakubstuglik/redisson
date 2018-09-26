@@ -92,7 +92,7 @@ public abstract class QueueTransferTask {
         
         messageListenerId = schedulerTopic.addListener(new MessageListener<Long>() {
             @Override
-            public void onMessage(String channel, Long startTime) {
+            public void onMessage(CharSequence channel, Long startTime) {
                 scheduleTask(startTime);
             }
         });
@@ -106,7 +106,7 @@ public abstract class QueueTransferTask {
 
     private void scheduleTask(final Long startTime) {
         TimeoutTask oldTimeout = lastTimeout.get();
-        if (startTime == null || (oldTimeout != null && oldTimeout.getStartTime() < startTime)) {
+        if (startTime == null) {
             return;
         }
         

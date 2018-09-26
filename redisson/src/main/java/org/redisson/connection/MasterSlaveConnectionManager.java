@@ -15,13 +15,11 @@
  */
 package org.redisson.connection;
 
-import java.lang.reflect.Field;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -242,7 +240,7 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
         }
 
         if (addr != null) {
-            client = createClient(NodeType.MASTER, addr, cfg.getConnectTimeout(), cfg.getRetryInterval() * cfg.getRetryAttempts(), sslHostname);
+            client = createClient(NodeType.MASTER, addr, cfg.getConnectTimeout(), cfg.getTimeout(), sslHostname);
         }
         final RPromise<RedisConnection> result = new RedissonPromise<RedisConnection>();
         RFuture<RedisConnection> future = client.connectAsync();
@@ -315,16 +313,7 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
             minTimeout = 100;
         }
         
-        timer = new HashedWheelTimer(Executors.defaultThreadFactory(), minTimeout, TimeUnit.MILLISECONDS, 1024);
-        
-        // to avoid assertion error during timer.stop invocation
-        try {
-            Field leakField = HashedWheelTimer.class.getDeclaredField("leak");
-            leakField.setAccessible(true);
-            leakField.set(timer, null);
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
+        timer = new HashedWheelTimer(Executors.defaultThreadFactory(), minTimeout, TimeUnit.MILLISECONDS, 1024, false);
         
         connectionWatcher = new IdleConnectionWatcher(this, config);
         subscribeService = new PublishSubscribeService(this, config);
@@ -332,14 +321,11 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
 
     protected void initSingleEntry() {
         try {
-            HashSet<ClusterSlotRange> slots = new HashSet<ClusterSlotRange>();
-            slots.add(singleSlotRange);
-    
             MasterSlaveEntry entry;
             if (config.checkSkipSlavesInit()) {
-                entry = new SingleEntry(slots, this, config);
+                entry = new SingleEntry(this, config);
             } else {
-                entry = createMasterSlaveEntry(config, slots);
+                entry = createMasterSlaveEntry(config);
             }
             RFuture<RedisClient> f = entry.setupMasterEntry(config.getMasterAddress());
             f.syncUninterruptibly();
@@ -363,9 +349,8 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
         }
     }
     
-    protected MasterSlaveEntry createMasterSlaveEntry(MasterSlaveServersConfig config,
-            HashSet<ClusterSlotRange> slots) {
-        MasterSlaveEntry entry = new MasterSlaveEntry(slots, this, config);
+    protected MasterSlaveEntry createMasterSlaveEntry(MasterSlaveServersConfig config) {
+        MasterSlaveEntry entry = new MasterSlaveEntry(this, config);
         List<RFuture<Void>> fs = entry.initSlaveBalancer(java.util.Collections.<URI>emptySet());
         for (RFuture<Void> future : fs) {
             future.syncUninterruptibly();
@@ -412,13 +397,13 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
 
     @Override
     public RedisClient createClient(NodeType type, URI address, String sslHostname) {
-        RedisClient client = createClient(type, address, config.getConnectTimeout(), config.getRetryInterval() * config.getRetryAttempts(), sslHostname);
+        RedisClient client = createClient(type, address, config.getConnectTimeout(), config.getTimeout(), sslHostname);
         return client;
     }
     
     @Override
     public RedisClient createClient(NodeType type, InetSocketAddress address, URI uri, String sslHostname) {
-        RedisClient client = createClient(type, address, uri, config.getConnectTimeout(), config.getRetryInterval() * config.getRetryAttempts(), sslHostname);
+        RedisClient client = createClient(type, address, uri, config.getConnectTimeout(), config.getTimeout(), sslHostname);
         return client;
     }
 
@@ -471,6 +456,10 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
         return singleSlotRange.getStartSlot();
     }
 
+    @Override
+    public int calcSlot(byte[] key) {
+        return singleSlotRange.getStartSlot();
+    }
 
     @Override
     public MasterSlaveEntry getEntry(InetSocketAddress address) {
@@ -527,17 +516,18 @@ public class MasterSlaveConnectionManager implements ConnectionManager {
             }
         });
     }
-
+    
     protected final void addEntry(Integer slot, MasterSlaveEntry entry) {
-        slot2entry.set(slot, entry);
-        entry.addSlotRange(slot);
+        MasterSlaveEntry oldEntry = slot2entry.getAndSet(slot, entry);
+        if (oldEntry != entry) {
+            entry.incReference();
+        }
         client2entry.put(entry.getClient(), entry);
     }
 
     protected final MasterSlaveEntry removeEntry(Integer slot) {
         MasterSlaveEntry entry = slot2entry.getAndSet(slot, null);
-        entry.removeSlotRange(slot);
-        if (entry.getSlotRanges().isEmpty()) {
+        if (entry.decReference() == 0) {
             client2entry.remove(entry.getClient());
         }
         return entry;

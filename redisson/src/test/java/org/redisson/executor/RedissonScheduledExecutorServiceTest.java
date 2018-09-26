@@ -17,15 +17,18 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.redisson.BaseTest;
+import org.redisson.RedissonExecutorService;
 import org.redisson.RedissonNode;
 import org.redisson.api.CronSchedule;
 import org.redisson.api.ExecutorOptions;
 import org.redisson.api.RExecutorFuture;
 import org.redisson.api.RScheduledExecutorService;
 import org.redisson.api.RScheduledFuture;
+import org.redisson.api.RemoteInvocationOptions;
 import org.redisson.config.Config;
 import org.redisson.config.RedissonNodeConfig;
 
+import mockit.Deencapsulation;
 import mockit.Invocation;
 import mockit.Mock;
 import mockit.MockUp;
@@ -53,6 +56,42 @@ public class RedissonScheduledExecutorServiceTest extends BaseTest {
     }
     
     @Test
+    public void testDelay() throws InterruptedException {
+        RScheduledExecutorService executor = redisson.getExecutorService("test", ExecutorOptions.defaults().taskRetryInterval(5, TimeUnit.SECONDS));
+        long start = System.currentTimeMillis();
+        RScheduledFuture<?> f = executor.schedule(new ScheduledCallableTask(), 11, TimeUnit.SECONDS);
+        assertThat(f.awaitUninterruptibly(12000)).isTrue();
+        assertThat(f.isSuccess()).isTrue();
+        assertThat(System.currentTimeMillis() - start).isBetween(11000L, 11500L);
+        
+        Deencapsulation.setField(RedissonExecutorService.class, "RESULT_OPTIONS", RemoteInvocationOptions.defaults().noAck().expectResultWithin(3, TimeUnit.SECONDS));
+        executor = redisson.getExecutorService("test", ExecutorOptions.defaults().taskRetryInterval(5, TimeUnit.SECONDS));
+        start = System.currentTimeMillis();
+        RScheduledFuture<?> f1 = executor.schedule(new ScheduledCallableTask(), 5, TimeUnit.SECONDS);
+        assertThat(f1.awaitUninterruptibly(6000)).isTrue();
+        assertThat(f1.isSuccess()).isTrue();
+        assertThat(System.currentTimeMillis() - start).isBetween(5000L, 5500L);
+
+        start = System.currentTimeMillis();
+        RScheduledFuture<?> f2 = executor.schedule(new RunnableTask(), 5, TimeUnit.SECONDS);
+        assertThat(f2.awaitUninterruptibly(6000)).isTrue();
+        assertThat(f2.isSuccess()).isTrue();
+        assertThat(System.currentTimeMillis() - start).isBetween(5000L, 5500L);
+    }
+    
+    @Test
+    public void testScheduleWithFixedDelay() throws InterruptedException {
+        RScheduledExecutorService executor = redisson.getExecutorService("test", ExecutorOptions.defaults().taskRetryInterval(5, TimeUnit.SECONDS));
+        executor.scheduleWithFixedDelay(new IncrementRunnableTask("counter"), 0, 7, TimeUnit.SECONDS);
+        Thread.sleep(500);
+        assertThat(redisson.getAtomicLong("counter").get()).isEqualTo(1);
+        Thread.sleep(7000);
+        assertThat(redisson.getAtomicLong("counter").get()).isEqualTo(2);
+        Thread.sleep(7000);
+        assertThat(redisson.getAtomicLong("counter").get()).isEqualTo(3);
+    }
+    
+    @Test
     public void testTaskFailover() throws Exception {
         AtomicInteger counter = new AtomicInteger();
         new MockUp<TasksRunnerService>() {
@@ -71,8 +110,10 @@ public class RedissonScheduledExecutorServiceTest extends BaseTest {
         node.start();
         
         RScheduledExecutorService executor = redisson.getExecutorService("test2", ExecutorOptions.defaults().taskRetryInterval(10, TimeUnit.SECONDS));
+        long start = System.currentTimeMillis();
         RExecutorFuture<?> f = executor.schedule(new IncrementRunnableTask("counter"), 1, TimeUnit.SECONDS);
-        f.get();
+        f.syncUninterruptibly();
+        assertThat(System.currentTimeMillis() - start).isBetween(900L, 1200L);
         assertThat(redisson.getAtomicLong("counter").get()).isEqualTo(1);
         Thread.sleep(2000);
         node.shutdown();
@@ -146,10 +187,10 @@ public class RedissonScheduledExecutorServiceTest extends BaseTest {
     
     @Test
     public void testCronExpressionMultipleTasks() throws InterruptedException, ExecutionException {
-        RScheduledExecutorService executor = redisson.getExecutorService("test");
+        RScheduledExecutorService executor = redisson.getExecutorService("test", ExecutorOptions.defaults().taskRetryInterval(2, TimeUnit.SECONDS));
         executor.schedule(new ScheduledRunnableTask("executed1"), CronSchedule.of("0/5 * * * * ?"));
         executor.schedule(new ScheduledRunnableTask("executed2"), CronSchedule.of("0/1 * * * * ?"));
-        Thread.sleep(30200);
+        Thread.sleep(30000);
         assertThat(redisson.getAtomicLong("executed1").get()).isEqualTo(6);
         assertThat(redisson.getAtomicLong("executed2").get()).isEqualTo(30);
     }
@@ -163,6 +204,7 @@ public class RedissonScheduledExecutorServiceTest extends BaseTest {
         Thread.sleep(2000);
         assertThat(redisson.getAtomicLong("executed1").isExists()).isFalse();
         
+        executor.delete();
         redisson.getKeys().delete("executed1");
         assertThat(redisson.getKeys().count()).isZero();
     }
@@ -174,7 +216,7 @@ public class RedissonScheduledExecutorServiceTest extends BaseTest {
         cancel(future1);
         Thread.sleep(2000);
         assertThat(redisson.getAtomicLong("executed1").isExists()).isFalse();
-        assertThat(executor.delete()).isFalse();
+        executor.delete();
         
         redisson.getKeys().delete("executed1");
         assertThat(redisson.getKeys().count()).isZero();
@@ -193,6 +235,7 @@ public class RedissonScheduledExecutorServiceTest extends BaseTest {
         assertThat(executor.cancelTask(futureAsync.getTaskId())).isTrue();
         assertThat(redisson.<Long>getBucket("executed2").get()).isBetween(1000L, Long.MAX_VALUE);
         
+        executor.delete();
         redisson.getKeys().delete("executed1", "executed2");
         assertThat(redisson.getKeys().count()).isZero();
     }
@@ -216,6 +259,7 @@ public class RedissonScheduledExecutorServiceTest extends BaseTest {
         Thread.sleep(3000);
         assertThat(redisson.getAtomicLong("executed2").get()).isEqualTo(2);
         
+        executor.delete();
         redisson.getKeys().delete("executed1", "executed2");
         assertThat(redisson.getKeys().count()).isZero();
     }
@@ -244,6 +288,7 @@ public class RedissonScheduledExecutorServiceTest extends BaseTest {
         Thread.sleep(3000);
         assertThat(redisson.getAtomicLong("counter").get()).isEqualTo(3);
         
+        executor.delete();
         redisson.getKeys().delete("counter", "executed1", "executed2");
         assertThat(redisson.getKeys().count()).isZero();
     }
@@ -271,6 +316,7 @@ public class RedissonScheduledExecutorServiceTest extends BaseTest {
         Thread.sleep(3000);
         assertThat(redisson.getAtomicLong("executed1").get()).isEqualTo(5);
         
+        executor.delete();
         redisson.getKeys().delete("executed1");
         assertThat(redisson.getKeys().count()).isZero();
     }
@@ -293,6 +339,7 @@ public class RedissonScheduledExecutorServiceTest extends BaseTest {
         assertThat(redisson.getAtomicLong("executed2").get()).isEqualTo(1);
         assertThat(redisson.getAtomicLong("executed3").get()).isEqualTo(1);
         
+        executor.delete();
         redisson.getKeys().delete("executed1", "executed2", "executed3");
         assertThat(redisson.getKeys().count()).isZero();
     }
@@ -312,6 +359,7 @@ public class RedissonScheduledExecutorServiceTest extends BaseTest {
         assertThat(redisson.getAtomicLong("executed2").get()).isEqualTo(1);
         assertThat(redisson.getAtomicLong("executed3").get()).isEqualTo(1);
         
+        executor.delete();
         redisson.getKeys().delete("executed1", "executed2", "executed3");
         assertThat(redisson.getKeys().count()).isZero();
     }
@@ -325,6 +373,7 @@ public class RedissonScheduledExecutorServiceTest extends BaseTest {
         assertThat(System.currentTimeMillis() - startTime).isBetween(5000L, 5200L);
         assertThat(redisson.getAtomicLong("executed").get()).isEqualTo(1);
         
+        executor.delete();
         redisson.getKeys().delete("executed");
         assertThat(redisson.getKeys().count()).isZero();
     }

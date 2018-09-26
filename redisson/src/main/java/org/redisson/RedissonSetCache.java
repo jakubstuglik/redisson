@@ -62,12 +62,14 @@ import io.netty.buffer.ByteBuf;
 public class RedissonSetCache<V> extends RedissonExpirable implements RSetCache<V>, ScanIterator {
 
     RedissonClient redisson;
+    EvictionScheduler evictionScheduler;
     
     public RedissonSetCache(EvictionScheduler evictionScheduler, CommandAsyncExecutor commandExecutor, String name, RedissonClient redisson) {
         super(commandExecutor, name);
         if (evictionScheduler != null) {
             evictionScheduler.schedule(getName(), 0);
         }
+        this.evictionScheduler = evictionScheduler;
         this.redisson = redisson;
     }
 
@@ -76,6 +78,7 @@ public class RedissonSetCache<V> extends RedissonExpirable implements RSetCache<
         if (evictionScheduler != null) {
             evictionScheduler.schedule(getName(), 0);
         }
+        this.evictionScheduler = evictionScheduler;
         this.redisson = redisson;
     }
     
@@ -363,7 +366,7 @@ public class RedissonSetCache<V> extends RedissonExpirable implements RSetCache<
         delete();
     }
 
-    private String getLockName(Object value) {
+    public String getLockName(Object value) {
         ByteBuf state = encode(value);
         try {
             return suffixName(getName(value), Hash.hash128toBase64(state) + ":lock");
@@ -376,6 +379,13 @@ public class RedissonSetCache<V> extends RedissonExpirable implements RSetCache<
     public RLock getLock(V value) {
         String lockName = getLockName(value);
         return new RedissonLock(commandExecutor, lockName);
+    }
+
+    @Override
+    public void destroy() {
+        if (evictionScheduler != null) {
+            evictionScheduler.remove(getName());
+        }
     }
 
 }

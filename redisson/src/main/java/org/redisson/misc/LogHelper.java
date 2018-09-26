@@ -20,6 +20,9 @@ import java.util.Collection;
 
 import org.redisson.client.protocol.CommandData;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.util.CharsetUtil;
+
 /**
  * @author Philipp Marx
  */

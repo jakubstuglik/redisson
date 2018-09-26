@@ -18,10 +18,8 @@ package org.redisson.connection;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.redisson.api.NodeType;
@@ -32,7 +30,6 @@ import org.redisson.client.RedisPubSubConnection;
 import org.redisson.client.protocol.CommandData;
 import org.redisson.client.protocol.RedisCommand;
 import org.redisson.cluster.ClusterConnectionManager;
-import org.redisson.cluster.ClusterSlotRange;
 import org.redisson.config.MasterSlaveServersConfig;
 import org.redisson.config.ReadMode;
 import org.redisson.config.SubscriptionMode;
@@ -45,6 +42,7 @@ import org.redisson.misc.RPromise;
 import org.redisson.misc.RedissonPromise;
 import org.redisson.misc.TransferListener;
 import org.redisson.misc.URIBuilder;
+import org.redisson.pubsub.PubSubConnectionEntry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -65,11 +63,12 @@ public class MasterSlaveEntry {
     LoadBalancerManager slaveBalancer;
     ClientConnectionsEntry masterEntry;
 
+    int references;
+    
     final MasterSlaveServersConfig config;
     final ConnectionManager connectionManager;
 
     final MasterConnectionPool writeConnectionPool;
-    final Set<Integer> slots = new HashSet<Integer>();
     
     final MasterPubSubConnectionPool pubSubConnectionPool;
 
@@ -77,12 +76,7 @@ public class MasterSlaveEntry {
     
     String sslHostname;
     
-    public MasterSlaveEntry(Set<ClusterSlotRange> slotRanges, ConnectionManager connectionManager, MasterSlaveServersConfig config) {
-        for (ClusterSlotRange clusterSlotRange : slotRanges) {
-            for (int i = clusterSlotRange.getStartSlot(); i < clusterSlotRange.getEndSlot() + 1; i++) {
-                slots.add(i);
-            }
-        }
+    public MasterSlaveEntry(ConnectionManager connectionManager, MasterSlaveServersConfig config) {
         this.connectionManager = connectionManager;
         this.config = config;
 
@@ -202,9 +196,13 @@ public class MasterSlaveEntry {
         
         entry.reset();
         
-        closeConnections(entry);
+        for (RedisConnection connection : entry.getAllConnections()) {
+            connection.closeAsync();
+            reattachBlockingQueue(connection);
+        }
         
         for (RedisPubSubConnection connection : entry.getAllSubscribeConnections()) {
+            connection.closeAsync();
             connectionManager.getSubscribeService().reattachPubSub(connection);
         }
         entry.getAllSubscribeConnections().clear();
@@ -212,32 +210,6 @@ public class MasterSlaveEntry {
         return true;
     }
 
-    private void closeConnections(ClientConnectionsEntry entry) {
-        // close all connections
-        while (true) {
-            final RedisConnection connection = entry.pollConnection();
-            if (connection == null) {
-                break;
-            }
-           
-            connection.closeAsync().addListener(new ChannelFutureListener() {
-                @Override
-                public void operationComplete(ChannelFuture future) throws Exception {
-                    reattachBlockingQueue(connection);
-                }
-            });
-        }
-
-        // close all pub/sub connections
-        while (true) {
-            RedisPubSubConnection connection = entry.pollSubscribeConnection();
-            if (connection == null) {
-                break;
-            }
-            connection.closeAsync();
-        }
-    }
-    
     private void reattachBlockingQueue(RedisConnection connection) {
         final CommandData<?, ?> commandData = connection.getCurrentCommand();
 
@@ -257,7 +229,7 @@ public class MasterSlaveEntry {
                 }
 
                 final RedisConnection newConnection = future.getNow();
-                    
+                
                 final FutureListener<Object> listener = new FutureListener<Object>() {
                     @Override
                     public void operationComplete(Future<Object> future) throws Exception {
@@ -523,17 +495,17 @@ public class MasterSlaveEntry {
         }
         slaveBalancer.returnConnection(connection);
     }
-
-    public void addSlotRange(Integer range) {
-        slots.add(range);
+    
+    public void incReference() {
+        references++;
     }
-
-    public void removeSlotRange(Integer range) {
-        slots.remove(range);
+    
+    public int decReference() {
+        return --references;
     }
-
-    public Set<Integer> getSlotRanges() {
-        return slots;
+    
+    public int getReferences() {
+        return references;
     }
 
     @Override

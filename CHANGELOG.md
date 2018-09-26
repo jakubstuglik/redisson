@@ -2,7 +2,37 @@ Redisson Releases History
 ================================
 ### Please Note: trunk is current development branch.
 
-Try __[Redisson PRO](https://redisson.pro)__ version.
+Please consider __[Redisson PRO](https://redisson.pro)__ version for advanced features and support by SLA.
+
+### 18-Sep-2018 - versions 2.13.1 and 3.8.1 released
+Feature - __RStream__ object added. Please refer to [documentation](https://github.com/redisson/redisson/wiki/7.-Distributed-collections#720-stream) for more details  
+Fixed - `failedSlaveCheckInterval` setting is not applied under some conditions  
+Fixed - `spring.factories` and `spring.provides` files added to Spring Boot module  
+Fixed - `pingConnectionInterval` setting affects re-connection process with password enabled setting  
+Fixed - Lock watchdog does not monitor read locks  
+Fixed - Lock expiration renewal should be canceled if unlock method failed to execute  
+Fixed - `BlockingQueue.take` method doesn't work properly after failover  
+Fixed - Avoid to create connection per `RRemoteService/RScheduledExecutorService` worker  
+Fixed - backward JDK 8 compatibility  
+
+### 03-Sep-2018 - versions 2.13.0 and 3.8.0 released
+Feature - __Spring Data Redis__ integration. Please refer to [documentation](https://github.com/redisson/redisson/tree/master/redisson-spring-data#spring-data-redis-integration) for more details  
+Feature - __Spring Boot Starter__ implementation. Please refer to [documentation](https://github.com/redisson/redisson/tree/master/redisson-spring-boot-starter#spring-boot-starter) for more details  
+Feature - `RBlockingDequeReactive` object added  
+Feature - `sharedSession` setting for Tomcat Session Manager. Appropriate solution for migration of EAR based application with multiple WARs hosted previously on WebLogic or other servers. Please refer to [documentation](https://github.com/redisson/redisson/tree/master/redisson-tomcat) for more details  
+Improvement - Redis request/response handling performance improvement  
+Improvement - CompositeIterator decoupled from CompositeIterable (thanks to [Pepe-Lu](https://github.com/Pepe-Lu))  
+Fixed - task scheduled with time more than 1 hour is not executed  
+Fixed - RScheduledExecutorService doesn't handle delayed tasks correctly  
+Fixed - `RMapCache` and `RSetCache` objects should implement `RDestroyable`  
+Fixed - `RBucket.set` method with ttl throws NPE if value is null  
+Fixed - false HashedWheelTimer resource leak message  
+Fixed - `RExecutorService` task execution performance regression  
+Fixed - locking in multiple parallel transactions created with the same thread  
+Fixed - `JCache.removeAll` doesn't work  
+Fixed - Batch in `ExecutionMode.REDIS_WRITE_ATOMIC` and `ExecutionMode.REDIS_READ_ATOMIC` returns `QUEUED` instead of real result  
+Fixed - tasks scheduled with cron expression don't work in different timezones (thanks to [Arpit Agrawal](https://github.com/arpit728))  
+Fixed - global config codec is not registered in codec cache for reference objects (thanks to [Rui Gu](https://github.com/jackygurui))  
 
 ### 19-Jul-2018 - versions 2.12.5 and 3.7.5 released
 Feature - `RScoredSortedSetReactive`, `RSetReactive`, `RListReactive` objects implement `RSortableReactive` interface  
