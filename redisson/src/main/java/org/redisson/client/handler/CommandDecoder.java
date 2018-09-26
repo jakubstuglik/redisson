@@ -129,7 +129,8 @@ public class CommandDecoder extends ReplayingDecoder<State> {
                 }
                 sendNext(ctx, data);
             } catch (Exception e) {
-                log.error("Unable to decode data. channel: {} message: {}", ctx.channel(), in.toString(0, in.writerIndex(), CharsetUtil.UTF_8), e);
+                //log.error("Unable to decode data. channel: {} message: {}", ctx.channel(), in.toString(0, in.writerIndex(), CharsetUtil.UTF_8), e);
+            	log.error("decodeCommand error: " + e.getMessage());
                 cmd.tryFailure(e);
                 sendNext(ctx);
                 throw e;
